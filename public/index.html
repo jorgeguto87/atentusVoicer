@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Alterador de Voz para WhatsApp</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Roboto', sans-serif;
+    }
+
+    body {
+      background: linear-gradient(to right, #0f2027, #203a43, #2c5364);
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+      min-height: 100vh;
+    }
+
+    h2 {
+      margin-bottom: 20px;
+      text-align: center;
+    }
+
+    .container {
+      background: #1e2a38;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+      max-width: 400px;
+      width: 100%;
+    }
+
+    label {
+      display: block;
+      margin-top: 15px;
+      margin-bottom: 5px;
+      font-weight: bold;
+    }
+
+    input, select, button {
+      width: 100%;
+      padding: 10px;
+      margin-bottom: 10px;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+    }
+
+    input, select {
+      background-color: #324a5f;
+      color: #fff;
+    }
+
+    button {
+      background-color: #4db8ff;
+      color: #fff;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+
+    button:hover {
+      background-color: #3399ff;
+    }
+
+    audio {
+      width: 100%;
+      margin-top: 15px;
+    }
+
+    @media (max-width: 480px) {
+      .container {
+        padding: 15px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <h2>🎙️ Alterador de Voz para WhatsApp</h2>
+  <div class="container">
+    <label for="numero">Número WhatsApp:</label>
+    <input type="text" id="numero" placeholder="5511999999999" />
+
+    <label for="efeito">Escolha o Efeito de Voz:</label>
+    <select id="efeito">
+      <option value="normal">🔵 Normal</option>
+      <option value="grave">🔻 Voz Grave</option>
+      <option value="aguda">🔺 Voz Aguda</option>
+      <option value="robo">🤖 Robótica</option>
+      <option value="eco">🌊 Eco</option>
+      <option value="reverb">⛪ Reverberação</option>
+      <option value="tremolo">🎶 Tremolo</option>
+    </select>
+
+    <button id="gravar">🎤 Gravar</button>
+    <button id="parar" disabled>⏹️ Parar</button>
+    <button id="enviar" disabled>📤 Enviar para WhatsApp</button>
+
+    <audio id="reproduzir" controls></audio>
+  </div>
+
+  <script>
+    let audioContext;
+    let mediaStream;
+    let mediaRecorder;
+    let audioChunks = [];
+    let effectNode;
+
+    const gravar = document.getElementById('gravar');
+    const parar = document.getElementById('parar');
+    const enviar = document.getElementById('enviar');
+    const audio = document.getElementById('reproduzir');
+    const efeito = document.getElementById('efeito');
+
+    gravar.onclick = async () => {
+      audioContext = new AudioContext();
+      mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+      const source = audioContext.createMediaStreamSource(mediaStream);
+      const destination = audioContext.createMediaStreamDestination();
+
+      effectNode = aplicarEfeito(audioContext, efeito.value);
+      source.connect(effectNode);
+      effectNode.connect(destination);
+      effectNode.connect(audioContext.destination);
+
+      mediaRecorder = new MediaRecorder(destination.stream);
+      mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+      mediaRecorder.onstop = () => {
+        const audioBlob = new Blob(audioChunks, { type: 'audio/ogg; codecs=opus' });
+        const audioURL = URL.createObjectURL(audioBlob);
+        audio.src = audioURL;
+        audio.file = audioBlob;
+        enviar.disabled = false;
+      };
+
+      mediaRecorder.start();
+      audioChunks = [];
+      gravar.disabled = true;
+      parar.disabled = false;
+    };
+
+    parar.onclick = () => {
+      mediaRecorder.stop();
+      mediaStream.getTracks().forEach(track => track.stop());
+      audioContext.close();
+      gravar.disabled = false;
+      parar.disabled = true;
+    };
+
+    enviar.onclick = async () => {
+      const numero = document.getElementById('numero').value;
+      if (!numero) return alert('Digite um número válido');
+
+      const formData = new FormData();
+      formData.append('audio', audio.file, 'voz.ogg');
+      formData.append('number', numero + '@c.us');
+
+      const res = await fetch('http://localhost:3000/send-audio', {
+        method: 'POST',
+        body: formData
+      });
+
+      const data = await res.json();
+      alert(data.status);
+    };
+
+    function aplicarEfeito(ctx, tipo) {
+      switch (tipo) {
+        case 'grave': {
+          const filter = ctx.createBiquadFilter();
+          filter.type = 'lowshelf';
+          filter.frequency.value = 300;
+          filter.gain.value = 25;
+          return filter;
+        }
+        case 'aguda': {
+          const filter = ctx.createBiquadFilter();
+          filter.type = 'highshelf';
+          filter.frequency.value = 3000;
+          filter.gain.value = 20;
+          return filter;
+        }
+        case 'robo': {
+          const distortion = ctx.createWaveShaper();
+          distortion.curve = criarDistorcao(400);
+          distortion.oversample = '4x';
+          return distortion;
+        }
+        case 'eco': {
+          const delay = ctx.createDelay(5);
+          delay.delayTime.value = 0.4;
+          return delay;
+        }
+        case 'reverb': {
+          const convolver = ctx.createConvolver();
+          const buffer = ctx.createBuffer(2, 44100, ctx.sampleRate);
+          for (let i = 0; i < 2; i++) {
+            const channel = buffer.getChannelData(i);
+            for (let j = 0; j < buffer.length; j++) {
+              channel[j] = (Math.random() * 2 - 1) * Math.pow(1 - j / buffer.length, 2);
+            }
+          }
+          convolver.buffer = buffer;
+          return convolver;
+        }
+        case 'tremolo': {
+          const gain = ctx.createGain();
+          const oscillator = ctx.createOscillator();
+          oscillator.type = 'sine';
+          oscillator.frequency.value = 10;
+          const tremolo = ctx.createGain();
+          tremolo.gain.value = 0.5;
+          oscillator.connect(tremolo);
+          tremolo.connect(gain.gain);
+          oscillator.start();
+          return gain;
+        }
+        default:
+          return ctx.createGain();
+      }
+    }
+
+    function criarDistorcao(k) {
+      const n_samples = 44100;
+      const curve = new Float32Array(n_samples);
+      const deg = Math.PI / 180;
+      for (let i = 0; i < n_samples; ++i) {
+        const x = i * 2 / n_samples - 1;
+        curve[i] = ((3 + k) * x * 20 * deg) / (Math.PI + k * Math.abs(x));
+      }
+      return curve;
+    }
+  </script>
+</body>
+</html>
