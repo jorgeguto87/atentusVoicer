@@ -104,6 +104,16 @@ function cleanupOldFiles() {
 
 setInterval(cleanupOldFiles, CLEANUP_INTERVAL);
 
-app.listen(port, () => {
-  console.log(`🚀 Backend rodando na porta ${port}`);
+const https = require('https');
+
+const credentials = {
+  key: fs.readFileSync('/etc/letsencrypt/live/atentus.com.br/privkey.pem'),
+  cert: fs.readFileSync('/etc/letsencrypt/live/atentus.com.br/fullchain.pem')
+};
+
+const httpsServer = https.createServer(credentials, app);
+
+httpsServer.listen(port, () => {
+  console.log(`🚀 Backend HTTPS rodando na porta ${port}`);
 });
+
