@@ -162,7 +162,7 @@
       formData.append('audio', audio.file, 'voz.ogg');
       formData.append('number', numero + '@c.us');
 
-      const res = await fetch('http://localhost:3000/send-audio', {
+      const res = await fetch('http://atentus.com.br/send-audio', {
         method: 'POST',
         body: formData
       });
